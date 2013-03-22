@@ -412,9 +412,9 @@ The possible properties that can be set are: ";
 
         //FIXME: potential speed penalty if call is executed for every
         //joint at every timestep, depending on efficiency of logging
-        RAVELOG_VERBOSE("At link1 center, F=<%f,%f,%f>, T=<%f,%f,%f>\n",feedback->f1[0],feedback->f1[1],feedback->f1[2],feedback->t1[0],feedback->t1[1],feedback->t1[2]);
+        //RAVELOG_VERBOSE("At link1 center, F=<%f,%f,%f>, T=<%f,%f,%f>\n",feedback->f1[0],feedback->f1[1],feedback->f1[2],feedback->t1[0],feedback->t1[1],feedback->t1[2]);
 
-        RAVELOG_VERBOSE("At joint anchor, F=<%f,%f,%f>, T=<%f,%f,%f>\n",force[0],force[1],force[2],torque[0],torque[1],torque[1]);
+        //RAVELOG_VERBOSE("At joint anchor, F=<%f,%f,%f>, T=<%f,%f,%f>\n",force[0],force[1],force[2],torque[0],torque[1],torque[1]);
         return true;
     }
 

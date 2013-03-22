@@ -400,7 +400,7 @@ private:
             x=t.trans.x+com_rot[0];
             y=t.trans.y+com_rot[1];
             z=t.trans.z+com_rot[2];
-            RAVELOG_DEBUG("Link %s position [%f,%f,%f]\n",(*itlink)->GetName().c_str(),x,y,z);
+            RAVELOG_VERBOSE("Link %s position [%f,%f,%f]\n",(*itlink)->GetName().c_str(),x,y,z);
             dBodySetPosition(link->body,x,y,z);
 
             BOOST_ASSERT( RaveFabs(t.rot.lengthsqr4()-1) < 0.0001f );
