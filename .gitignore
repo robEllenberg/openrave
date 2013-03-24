@@ -1,0 +1,11 @@
+*.so.*
+*.so
+*install.cmake
+Makefile
+CMakeFiles
+CMakeCache.txt
+*.a
+*.o
+*.pyc
+cscope.out
+build

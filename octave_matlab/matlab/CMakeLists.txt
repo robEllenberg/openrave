@@ -28,7 +28,7 @@ endif()
 if(MATLAB)
 
   # check if the mex file is actually matlab (can be confused with latex)
-  EXEC_PROGRAM(${MATLAB} ARGS "-version" OUTPUT_VARIABLE MEX_TEST_OUT RETURN_VALUE MEX_TEST_RETURN)
+  EXEC_PROGRAM(${MATLAB} ARGS "-help" OUTPUT_VARIABLE MEX_TEST_OUT RETURN_VALUE MEX_TEST_RETURN)
   #message(STATUS "mex result: ${MEX_TEST_OUT}")
   string(REGEX MATCH "MATLAB" IS_MATLAB "${MEX_TEST_OUT}")
 
