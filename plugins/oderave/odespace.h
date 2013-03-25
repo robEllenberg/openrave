@@ -348,15 +348,14 @@ private:
 
                 // set the transformation
                 RaveTransform<dReal> t = geom->GetTransform();
-                dGeomSetQuaternion(odegeom,&t.rot[0]);
 
-                RaveVector<dReal> com_rot=t.rotate(com);
                 dReal x,y,z;
-                x=t.trans.x-com_rot[0];
-                y=t.trans.y-com_rot[1];
-                z=t.trans.z-com_rot[2];
+                x=t.trans.x-com[0];
+                y=t.trans.y-com[1];
+                z=t.trans.z-com[2];
 
                 dGeomSetPosition(odegeom,x,y,z);
+                dGeomSetQuaternion(odegeom,&t.rot[0]);
 
                 // finally set the geom to the ode body
                 dGeomSetBody(odegeomtrans, link->body);
@@ -453,6 +452,7 @@ private:
 
                 //Joint anchors are specified here
                 KinBody::LinkPtr parent = (*itjoint)->GetHierarchyParentLink();
+                //Don't need an offset here since the anchors are global
                 dReal x,y,z;
                 x=anchor.x;
                 y=anchor.y;
