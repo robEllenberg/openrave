@@ -1138,11 +1138,20 @@ protected:
         if( !body ) {
             return false;
         }
-        is >> 
+        bool bCOMflag = false;
+        is >> bCOMflag;
+
         vector<KinBody::LinkPtr> links;
         links=body->GetLinks();
         FOREACHC(it, links) {
             os << (*it)->GetMass() << " ";
+        }
+        //Dump com offsets for each link in same order
+        if (bCOMflag){
+            FOREACHC(it, links) {
+                Vector comoffset = (*it)->GetCOMOffset();
+                os << comoffset[0] << " " << comoffset[1] << " " << comoffset[2] << " ";
+            }
         }
         return true;
     }
