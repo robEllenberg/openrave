@@ -347,6 +347,52 @@ protected:
     boost::array< boost::function<bool() >, 2> _usercheckfns;
 };
 
+/** \brief dynamics and collision checking with linear interpolation
+
+    For any joints with maxtorque > 0, uses KinBody::ComputeInverseDynamics to check if the necessary torque exceeds the max torque. Max torque is always called via GetMaxTorque
+ **/
+class OPENRAVE_API DynamicsCollisionConstraint
+{
+public:
+    /// \param listCheckBodies initialize with these bodies to check environment and self-collision with
+    /// \param parameters stored inside the structure as a weak pointer
+    DynamicsCollisionConstraint(PlannerBase::PlannerParametersPtr parameters, const std::list<KinBodyPtr>& listCheckBodies, bool bCheckEnv=true);
+    virtual ~DynamicsCollisionConstraint() {
+    }
+
+    /// \brief set user check fucntions
+    ///
+    /// Two functions can be set, one to be called before check collision and one after.
+    /// \param bCallAfterCheckCollision if set, function will be called after check collision functions.
+    virtual void SetUserCheckFunction(const boost::function<bool() >& usercheckfn, bool bCallAfterCheckCollision=false);
+
+    /// \brief checks line collision. Uses the constructor's self-collisions
+    virtual int Check(const std::vector<dReal>& q0, const std::vector<dReal>& q1, const std::vector<dReal>& dq0, const std::vector<dReal>& dq1, dReal timeelapsed, IntervalType interval, PlannerBase::ConfigurationVelocityListPtr pvCheckedConfigurations);
+
+    CollisionReportPtr GetReport() const {
+        return _report;
+    }
+
+protected:
+    virtual int _CheckState();
+
+    PlannerBase::PlannerParametersWeakPtr _parameters;
+    std::vector<dReal> _vtempconfig, _vtempvelconfig, dQ, _vtempveldelta, _vtempaccelconfig; ///< in configuration space
+    CollisionReportPtr _report;
+    std::list<KinBodyPtr> _listCheckBodies;
+    bool _bCheckEnv;
+    boost::array< boost::function<bool() >, 2> _usercheckfns;
+
+    // for dynamics
+    ConfigurationSpecification _specvel;
+    std::vector< std::pair<int, dReal> > _vtorquevalues;
+    std::vector< int > _vdofindices;
+    std::vector<dReal> _doftorques, _dofaccelerations; ///< in body DOF space
+    boost::shared_ptr<ConfigurationSpecification::SetConfigurationStateFn> _setvelstatefn;
+};
+
+typedef boost::shared_ptr<DynamicsCollisionConstraint> DynamicsCollisionConstraintPtr;
+
 /// \brief simple distance metric based on joint weights
 class OPENRAVE_API SimpleDistanceMetric
 {
@@ -377,10 +423,11 @@ protected:
 /// \param nummaxtries number of attemps to return a goal per Sample call.
 /// \param fsampleprob The probability to attempt to sample a goal
 /// \param searchfreeparameters if true, will search all the free parameters of the manipulator. Otherwise will use the current free parameters set on the robot
+/// \param ikfilteroptions the filter options to pass to RobotBase::Manipulator::FindIKSolutions.
 class OPENRAVE_API ManipulatorIKGoalSampler
 {
 public:
-    ManipulatorIKGoalSampler(RobotBase::ManipulatorConstPtr pmanip, const std::list<IkParameterization>&listparameterizations, int nummaxsamples=20, int nummaxtries=10, dReal fsampleprob=1, bool searchfreeparameters=true);
+    ManipulatorIKGoalSampler(RobotBase::ManipulatorConstPtr pmanip, const std::list<IkParameterization>&listparameterizations, int nummaxsamples=20, int nummaxtries=10, dReal fsampleprob=1, bool searchfreeparameters=true, int ikfilteroptions=IKFO_CheckEnvCollisions);
     virtual ~ManipulatorIKGoalSampler() {
     }
 
@@ -426,6 +473,7 @@ protected:
     std::list<int> _listreturnedsamples;
     std::vector<dReal> _vfreestart;
     int _tempikindex; ///< if _vikreturns.size() > 0, points to the original ik index of those solutions
+    int _ikfilteroptions;
     bool _searchfreeparameters;
 };
 

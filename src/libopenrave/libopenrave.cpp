@@ -917,18 +917,12 @@ const std::map<InterfaceType,std::string>& RaveGetInterfaceNamesMap()
 
 const std::map<IkParameterizationType,std::string>& RaveGetIkParameterizationMap(int alllowercase)
 {
-    return RaveGlobal::instance()->GetIkParameterizationMap(alllowercase);
+    return IkParameterization::GetIkParameterizationMap(alllowercase);
 }
 
 IkParameterizationType RaveGetIkTypeFromUniqueId(int uniqueid)
 {
-    uniqueid &= IKP_UniqueIdMask;
-    FOREACHC(it, RaveGlobal::instance()->GetIkParameterizationMap()) {
-        if( (it->first & (IKP_UniqueIdMask&~IKP_VelocityDataBit)) == (uniqueid&(IKP_UniqueIdMask&~IKP_VelocityDataBit)) ) {
-            return static_cast<IkParameterizationType>(it->first|(uniqueid&IKP_VelocityDataBit));
-        }
-    }
-    throw OPENRAVE_EXCEPTION_FORMAT("no ik exists of unique id 0x%x",uniqueid,ORE_InvalidArguments);
+    return IkParameterization::GetIkTypeFromUniqueId(uniqueid);
 }
 
 const std::string& RaveGetInterfaceName(InterfaceType type)
@@ -1134,6 +1128,22 @@ void RaveSetDataAccess(int options)
 int RaveGetDataAccess()
 {
     return RaveGlobal::instance()->GetDataAccess();
+}
+
+const std::map<IkParameterizationType,std::string>& IkParameterization::GetIkParameterizationMap(int alllowercase)
+{
+    return RaveGlobal::instance()->GetIkParameterizationMap(alllowercase);
+}
+
+IkParameterizationType IkParameterization::GetIkTypeFromUniqueId(int uniqueid)
+{
+    uniqueid &= IKP_UniqueIdMask;
+    FOREACHC(it, RaveGlobal::instance()->GetIkParameterizationMap()) {
+        if( (it->first & (IKP_UniqueIdMask&~IKP_VelocityDataBit)) == (uniqueid&(IKP_UniqueIdMask&~IKP_VelocityDataBit)) ) {
+            return static_cast<IkParameterizationType>(it->first|(uniqueid&IKP_VelocityDataBit));
+        }
+    }
+    throw OPENRAVE_EXCEPTION_FORMAT("no ik exists of unique id 0x%x",uniqueid,ORE_InvalidArguments);
 }
 
 ConfigurationSpecification IkParameterization::GetConfigurationSpecification(IkParameterizationType iktype, const std::string& interpolation)
@@ -1648,6 +1658,62 @@ std::string CollisionReport::__str__() const
     }
     s << ") contacts="<<contacts.size();
     return s.str();
+}
+
+bool PhysicsEngineBase::GetLinkForceTorque(KinBody::LinkConstPtr plink, Vector& force, Vector& torque)
+{
+    force = Vector(0,0,0);
+    torque = Vector(0,0,0);
+    //Loop over all joints in the parent body
+    FOREACHC(itjoint,plink->GetParent()->GetJoints()) {
+        //if this joint's parent or child body is the current body
+        bool bParentLink=(*itjoint)->GetHierarchyParentLink() == plink;
+        bool bChildLink=(*itjoint)->GetHierarchyChildLink() == plink;
+        if( bParentLink || bChildLink ) {
+            Vector f;
+            Vector T;
+            GetJointForceTorque(*itjoint, f,T);
+            if( bParentLink ) {
+                Vector r = (*itjoint)->GetAnchor()-plink->GetGlobalCOM();
+                force += f;
+                torque += T;
+                //Re-add moment due to equivalent load at body COM
+                torque += r.cross(f);
+            }
+            else {
+                //Equal but opposite sign
+                Vector r = (*itjoint)->GetAnchor()-plink->GetGlobalCOM();
+                force -= f;
+                torque -= T;
+                torque -= r.cross(f);
+            }
+        }
+    }
+    FOREACHC(itjoint,plink->GetParent()->GetPassiveJoints()) {
+        bool bParentLink=(*itjoint)->GetHierarchyParentLink() == plink;
+        bool bChildLink=(*itjoint)->GetHierarchyChildLink() == plink;
+        if( bParentLink || bChildLink ) {
+            Vector f;
+            Vector T;
+            GetJointForceTorque(*itjoint, f,T);
+
+            if( bParentLink ) {
+                Vector r = (*itjoint)->GetAnchor()-plink->GetGlobalCOM();
+                force += f;
+                torque += T;
+                //Re-add moment due to equivalent load at body COM
+                torque += r.cross(f);
+            }
+            else {
+                //Equal but opposite sign
+                Vector r = (*itjoint)->GetAnchor()-plink->GetGlobalCOM();
+                force -= f;
+                torque -= T;
+                torque -= r.cross(f);
+            }
+        }
+    }
+    return true;
 }
 
 void TriMesh::ApplyTransform(const Transform& t)
