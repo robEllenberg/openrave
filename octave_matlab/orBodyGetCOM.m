@@ -1,16 +1,12 @@
 % values = orBodyGetCOM(bodyid)
 
 function [com] = orBodyGetCOM(bodyid)
-    [masses,offsets]=orBodyGetLinkMasses(bodyid,1);
-    transforms=orBodyGetLinks(bodyid);
-    mtotals=[0,0,0]';
-    for k=1:length(masses)
-        %slow way (not vetorized)
-        T=[reshape(transforms(:,k),3,4);0,0,0,1];
-        globaloffset=T(1:3,1:3)'*offsets(k,:)'+T(1:3,4);
-        mtotals=mtotals+globaloffset*masses(k);
+    command_str = sprintf('body_getcenterofmass %d' ,bodyid);
+    out = orCommunicator(command_str, 1);
 
+    if(strcmp('error',sscanf(out,'%s',1)))
+        error('Error orBodyGetLinkMasses');
     end
-    com=mtotals/sum(masses);
 
+    com = str2num(out);
 end

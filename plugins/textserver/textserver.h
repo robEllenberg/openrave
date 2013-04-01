@@ -279,6 +279,7 @@ public:
         mapNetworkFns["body_getaabbs"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetAABBs,this,_1,_2,_3), OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getlinks"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetLinks,this,_1,_2,_3),OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getlinkmasses"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetLinkMasses,this,_1,_2,_3),OpenRaveWorkerFn(), true);
+        mapNetworkFns["body_getcenterofmass"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetCenterOfMass,this,_1,_2,_3),OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getdof"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetDOF,this,_1,_2,_3),OpenRaveWorkerFn(), true);
         mapNetworkFns["body_settransform"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orKinBodySetTransform,this,_1,_2,_3),OpenRaveWorkerFn(), false);
         mapNetworkFns["body_setjoints"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodySetJointValues,this,_1,_2,_3), OpenRaveWorkerFn(), false);
@@ -1169,6 +1170,35 @@ protected:
             return true;
         }
         return false;
+    }
+
+    bool orBodyGetCenterOfMass(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
+    {
+        _SyncWithWorkerThread();
+        EnvironmentMutex::scoped_lock lock(GetEnv()->GetMutex());
+        KinBodyPtr body = orMacroGetBody(is);
+        if( !body ) {
+            os << "error";
+            return false;
+        }
+
+        vector<KinBody::LinkPtr> links;
+        links=body->GetLinks();
+
+        dReal mass = 0.0;
+        Vector com = Vector(0.0,0.0,0.0);
+        Vector link_com = Vector(0.0,0.0,0.0);
+
+        FOREACHC(it, links) {
+            dReal link_mass = (*it)->GetMass();
+            link_com = (*it)->GetGlobalMassFrame().trans;
+            com += (link_com * link_mass);
+            mass += link_mass;
+        }
+
+        com /= mass;
+        os << com[0] << " " << com[1] << " " << com[2];
+        return true;
     }
 
     bool orRobotSensorSend(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
