@@ -278,6 +278,8 @@ public:
         mapNetworkFns["body_getaabb"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetAABB,this,_1,_2,_3), OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getaabbs"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetAABBs,this,_1,_2,_3), OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getlinks"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetLinks,this,_1,_2,_3),OpenRaveWorkerFn(), true);
+        mapNetworkFns["body_getlinkmasses"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetLinkMasses,this,_1,_2,_3),OpenRaveWorkerFn(), true);
+        mapNetworkFns["body_getcenterofmass"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetCenterOfMass,this,_1,_2,_3),OpenRaveWorkerFn(), true);
         mapNetworkFns["body_getdof"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodyGetDOF,this,_1,_2,_3),OpenRaveWorkerFn(), true);
         mapNetworkFns["body_settransform"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orKinBodySetTransform,this,_1,_2,_3),OpenRaveWorkerFn(), false);
         mapNetworkFns["body_setjoints"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orBodySetJointValues,this,_1,_2,_3), OpenRaveWorkerFn(), false);
@@ -310,6 +312,7 @@ public:
         mapNetworkFns["robot_sensordata"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orRobotSensorData,this,_1,_2,_3), OpenRaveWorkerFn(), true);
         mapNetworkFns["robot_setactivedofs"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orRobotSetActiveDOFs,this,_1,_2,_3), OpenRaveWorkerFn(), false);
         mapNetworkFns["robot_setactivemanipulator"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orRobotSetActiveManipulator,this,_1,_2,_3), OpenRaveWorkerFn(), false);
+        mapNetworkFns["robot_computeinversedynamics"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orRobotComputeInverseDynamics,this,_1,_2,_3), OpenRaveWorkerFn(), true);
         mapNetworkFns["robot_setdof"] = RAVENETWORKFN(boost::bind(&SimpleTextServer::orRobotSetDOFValues,this,_1,_2,_3), OpenRaveWorkerFn(), false);
         mapNetworkFns["robot_traj"] = RAVENETWORKFN(OpenRaveNetworkFn(), boost::bind(&SimpleTextServer::worRobotStartActiveTrajectory,this,_1,_2), false);
         mapNetworkFns["render"] = RAVENETWORKFN(OpenRaveNetworkFn(), boost::bind(&SimpleTextServer::worRender,this,_1,_2), false);
@@ -1111,7 +1114,7 @@ protected:
         return true;
     }
 
-    /// values = orBodyGetLinks(body) - returns the dof values of a kinbody
+    /// values = orBodyGetLinks(body) - returns the transformations of each link in the kinbody
     bool orBodyGetLinks(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
     {
         _SyncWithWorkerThread();
@@ -1124,6 +1127,32 @@ protected:
         body->GetLinkTransformations(trans);
         FOREACHC(it, trans) {
             os << TransformMatrix(*it) << " ";
+        }
+        return true;
+    }
+
+    bool orBodyGetLinkMasses(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
+    {
+        _SyncWithWorkerThread();
+        EnvironmentMutex::scoped_lock lock(GetEnv()->GetMutex());
+        KinBodyPtr body = orMacroGetBody(is);
+        if( !body ) {
+            return false;
+        }
+        bool bCOMflag = false;
+        is >> bCOMflag;
+
+        vector<KinBody::LinkPtr> links;
+        links=body->GetLinks();
+        FOREACHC(it, links) {
+            os << (*it)->GetMass() << " ";
+        }
+        //Dump com offsets for each link in same order
+        if (bCOMflag){
+            FOREACHC(it, links) {
+                Vector comoffset = (*it)->GetCOMOffset();
+                os << comoffset[0] << " " << comoffset[1] << " " << comoffset[2] << " ";
+            }
         }
         return true;
     }
@@ -1141,6 +1170,35 @@ protected:
             return true;
         }
         return false;
+    }
+
+    bool orBodyGetCenterOfMass(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
+    {
+        _SyncWithWorkerThread();
+        EnvironmentMutex::scoped_lock lock(GetEnv()->GetMutex());
+        KinBodyPtr body = orMacroGetBody(is);
+        if( !body ) {
+            os << "error";
+            return false;
+        }
+
+        vector<KinBody::LinkPtr> links;
+        links=body->GetLinks();
+
+        dReal mass = 0.0;
+        Vector com = Vector(0.0,0.0,0.0);
+        Vector link_com = Vector(0.0,0.0,0.0);
+
+        FOREACHC(it, links) {
+            dReal link_mass = (*it)->GetMass();
+            link_com = (*it)->GetGlobalMassFrame().trans;
+            com += (link_com * link_mass);
+            mass += link_mass;
+        }
+
+        com /= mass;
+        os << com[0] << " " << com[1] << " " << com[2];
+        return true;
     }
 
     bool orRobotSensorSend(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
@@ -2027,6 +2085,56 @@ protected:
         probot->GetController()->SetPath(ptraj);
         return true;
     }
+
+    /// torques = orRobotComputeInverseDynamics() - return torques calculated for desired robot state
+    bool orRobotComputeInverseDynamics(istream& is, ostream& os, boost::shared_ptr<void>& pdata)
+    {
+        _SyncWithWorkerThread();
+        EnvironmentMutex::scoped_lock lock(GetEnv()->GetMutex());
+        RobotBasePtr probot = orMacroGetRobot(is);
+        if( !probot ) {
+            return false;
+        }
+        vector<dReal> torques;
+        KinBody::ForceTorqueMap ftmap;
+
+        //Crude string serialization of FT map:
+
+        while (is){
+            string name="EmptyBody";
+            is >> name;
+            KinBody::LinkPtr curlink=probot->GetLink(name);
+
+            int i=0;
+            if (!!curlink){
+                int linkindex=curlink->GetIndex();
+                Vector force = Vector(0,0,0);
+                Vector torque = Vector(0,0,0);
+                for (i=0;i<3;++i){
+                   is >> force[i];
+                }
+                for (i=0;i<3;++i){
+                   is >> torque[i];
+                }
+                std::pair<Vector,Vector> temp1=std::make_pair(force,torque);
+                std::pair<int,std::pair<Vector,Vector> > temp2=std::make_pair(linkindex,temp1);
+                RAVELOG_VERBOSE("Applied Force on body %d is [%f,%f,%f]\n",linkindex,force[0],force[1],force[2]);
+                RAVELOG_VERBOSE("Applied Torque on body %d is [%f,%f,%f]\n",linkindex,torque[0],torque[1],torque[2]);
+                ftmap.insert(temp2);
+
+            }
+            else break;
+        }
+
+        std::vector<dReal> dofaccelerations;
+        probot->ComputeInverseDynamics(torques,dofaccelerations,ftmap);
+        FOREACH(it,torques) {
+            os << *it << " ";
+        }
+        return true;
+    }
+    //TODO: GetDOFVelocities
+    //Validate Torques against static case?
 
     /// [collision, bodycolliding] = orEnvCheckCollision(body) - returns whether a certain body is colliding with the scene
     bool orEnvCheckCollision(istream& is, ostream& os, boost::shared_ptr<void>& pdata)

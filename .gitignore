@@ -1,0 +1,26 @@
+# Built objects
+*.a
+*.cxx
+*.o
+*.pyc
+*.so
+*.so.*
+# CMake output files
+*install.cmake
+CMakeCache.txt
+CMakeFiles
+cmake_*
+cmake_install*
+install_manifest.txt
+Makefile
+# Build output files
+build
+check_libm_accuracy
+cscope.out
+models
+openrave*.bash
+openrave0.8*
+openrave0.9*
+*.egg-info
+*hashes.h
+*accuracy_results.h
